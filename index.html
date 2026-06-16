@@ -1,0 +1,415 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>今天吃什么？</title>
+    <!-- 引入高德地图的安全密钥 -->
+    <script type="text/javascript">
+        window._AMapSecurityConfig = {
+            securityJsCode: 'e515b3153dfe984c94dc705c84de5b40',
+        }
+    </script>
+    <!-- 引入高德地图 JS API，加载解析、搜索、步行规划、输入提示等插件 -->
+    <script type="text/javascript" src="https://webapi.amap.com/maps?v=2.0&key=6d32dce6ca5d07432a2be10066661d25&plugin=AMap.Geocoder,AMap.PlaceSearch,AMap.Walking,AMap.AutoComplete"></script>
+    <style>
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            background-color: #FFF9E6; 
+            font-family: "PingFang SC", "Microsoft YaHei", sans-serif;
+            color: #333;
+            display: flex;
+            justify-content: center;
+            min-height: 100vh;
+            padding: 0;
+        }
+
+        .container {
+            background: #ffffff;
+            width: 100%;
+            max-width: 480px; /* PC 端最大宽度，模拟手机屏幕 */
+            min-height: 100vh; /* 高度默认撑满屏幕 */
+            padding: 40px 20px 30px;
+            /* 移除圆角使其成为原生 H5 页面风格 */
+            box-shadow: 0 0 30px rgba(255, 159, 67, 0.15);
+            text-align: center;
+        }
+
+        .header h1 {
+            font-size: 28px;
+            color: #FF6B6B;
+            margin-bottom: 25px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
+        }
+
+        .input-section {
+            text-align: left;
+            margin-bottom: 20px;
+        }
+
+        .input-title {
+            font-size: 14px;
+            color: #ff9f43;
+            font-weight: bold;
+            margin-bottom: 8px;
+            display: block;
+        }
+
+        .input-group {
+            display: flex;
+            height: 45px;
+        }
+
+        .input-group input {
+            flex: 1;
+            padding: 0 15px;
+            border: 2px solid #FFEAA7;
+            border-right: none;
+            border-radius: 10px 0 0 10px;
+            outline: none;
+            font-size: 14px;
+            transition: border-color 0.3s;
+        }
+
+        .input-group input:focus {
+            border-color: #FF9F43;
+        }
+
+        .btn-choose {
+            background: #FF9F43;
+            color: #fff;
+            border: none;
+            padding: 0 20px;
+            border-radius: 0 10px 10px 0;
+            cursor: pointer;
+            font-size: 16px;
+            font-weight: bold;
+            display: flex;
+            align-items: center;
+            gap: 5px;
+            transition: background 0.3s, transform 0.1s;
+        }
+
+        .btn-choose:hover { background: #ff8c1a; }
+        .btn-choose:active { transform: scale(0.98); }
+        .btn-choose:disabled { background: #ccc; cursor: not-allowed; }
+
+        .roulette-box {
+            height: 80px;
+            background: #FFF3CD;
+            border: 2px dashed #FF9F43;
+            border-radius: 12px;
+            margin: 20px 0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            overflow: hidden;
+            position: relative;
+        }
+
+        .restaurant-name {
+            font-size: 24px;
+            font-weight: bold;
+            color: #E15F41;
+            width: 100%;
+            padding: 0 10px;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .highlight {
+            animation: pop 0.5s ease-out forwards;
+            color: #c23616;
+        }
+
+        @keyframes pop {
+            0% { transform: scale(1); }
+            50% { transform: scale(1.1); }
+            100% { transform: scale(1); }
+        }
+
+        .result-section {
+            display: none;
+            background: #f8f9fa;
+            padding: 15px;
+            border-radius: 10px;
+            margin-top: 15px;
+            text-align: left;
+            border-left: 4px solid #FF9F43;
+        }
+
+        .route-info {
+            font-size: 15px;
+            line-height: 1.6;
+            margin-bottom: 15px;
+            color: #555;
+        }
+
+        .route-info strong {
+            color: #FF6B6B;
+            font-size: 18px;
+        }
+        
+        /* 新增加载中文字的呼吸动画 */
+        .loading-text {
+            color: #ff9f43;
+            animation: pulse 0.8s infinite alternate;
+        }
+        @keyframes pulse {
+            0% { opacity: 0.5; }
+            100% { opacity: 1; }
+        }
+
+        /* 新增地图容器样式 */
+        .map-container {
+            width: 100%;
+            height: 250px;
+            border-radius: 8px;
+            margin-bottom: 15px;
+            border: 1px solid #e1e8ed;
+        }
+
+        .btn-redraw {
+            background: #f1f2f6;
+            color: #57606f;
+            border: 1px solid #ced6e0;
+            padding: 8px 15px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 14px;
+            float: right;
+            transition: background 0.2s;
+        }
+        
+        .btn-redraw:hover { background: #dfe4ea; }
+        
+        .clearfix::after {
+            content: "";
+            clear: both;
+            display: table;
+        }
+
+        .footer {
+            margin-top: 30px;
+            font-size: 12px;
+            color: #aaa;
+            text-align: center;
+        }
+
+        /* 针对手机端浏览器的响应式适配 */
+        @media (max-width: 480px) {
+            body {
+                padding: 0;
+                align-items: flex-start;
+            }
+            .container {
+                min-height: 100vh;
+                border-radius: 0;
+                padding: 40px 20px 30px;
+            }
+        }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <div class="header">
+        <h1>🍕 今天吃什么 🍦</h1>
+    </div>
+
+    <div class="input-section">
+        <label class="input-title">输入地址发现美味</label>
+        <div class="input-group">
+            <input type="text" id="address-input" placeholder="请输入您的地址..." autocomplete="off">
+            <button class="btn-choose" id="start-btn">
+                帮我选 🎲
+            </button>
+        </div>
+    </div>
+
+    <div class="roulette-box">
+        <div class="restaurant-name" id="roulette-display">等待抽取...</div>
+    </div>
+
+    <div class="result-section clearfix" id="result-section">
+        <div class="route-info" id="route-info">
+            <!-- 文字路线结果将注入在这里 -->
+        </div>
+        <!-- 新增的地图容器 -->
+        <div id="map-container" class="map-container"></div>
+        <button class="btn-redraw" id="redraw-btn">标记太远了，再抽一次</button>
+    </div>
+
+    <div class="footer">
+        数据来源高德地图，结果仅供娱乐参考，口味千人千面
+    </div>
+</div>
+
+<script>
+    let restaurants = [];
+    let startLocation = null;
+    let isAnimating = false;
+    let animationTimer = null;
+
+    const addressInput = document.getElementById('address-input');
+    const startBtn = document.getElementById('start-btn');
+    const rouletteDisplay = document.getElementById('roulette-display');
+    const resultSection = document.getElementById('result-section');
+    const routeInfo = document.getElementById('route-info');
+    const redrawBtn = document.getElementById('redraw-btn');
+
+    // 初始化高德地图服务
+    const geocoder = new AMap.Geocoder();
+    const placeSearch = new AMap.PlaceSearch({
+        type: '餐饮服务', 
+        pageSize: 10,     
+        pageIndex: 1
+    });
+
+    // 初始化地图实例，但不立即显示
+    const map = new AMap.Map('map-container', {
+        resizeEnable: true,
+        zoom: 14 // 默认缩放级别
+    });
+
+    // 初始化步行导航，并绑定到我们创建的地图实例上
+    const walking = new AMap.Walking({
+        map: map // 绑定 map 后，搜索路线会自动绘制在地图上
+    });
+
+    // 初始化输入提示（自动完成）插件，绑定输入框
+    const autoComplete = new AMap.AutoComplete({
+        input: "address-input"
+    });
+
+    // 点击“帮我选”
+    startBtn.addEventListener('click', () => {
+        if (isAnimating) return;
+        const address = addressInput.value.trim();
+        
+        if (!address) {
+            alert('请先输入您的地址哦！');
+            addressInput.focus();
+            return;
+        }
+
+        resultSection.style.display = 'none';
+        rouletteDisplay.classList.remove('highlight');
+        rouletteDisplay.innerText = '正在搜寻附近美食...';
+        startBtn.disabled = true;
+
+        geocoder.getLocation(address, (status, result) => {
+            if (status === 'complete' && result.geocodes.length) {
+                startLocation = result.geocodes[0].location;
+                searchNearbyFood(startLocation);
+            } else {
+                alert('找不到该地址，请检查是否输入正确。');
+                startBtn.disabled = false;
+                rouletteDisplay.innerText = '等待抽取...';
+            }
+        });
+    });
+
+    // 搜索周边美食
+    function searchNearbyFood(centerLocation) {
+        placeSearch.searchNearBy('', centerLocation, 2000, (status, result) => {
+            if (status === 'complete' && result.info === 'OK') {
+                restaurants = result.poiList.pois;
+                if (restaurants.length > 0) {
+                    startRouletteAnimation();
+                } else {
+                    alert('很遗憾，附近 2km 内没有搜到餐厅信息。');
+                    startBtn.disabled = false;
+                    rouletteDisplay.innerText = '等待抽取...';
+                }
+            } else {
+                alert('获取美食数据失败，请稍后再试。');
+                startBtn.disabled = false;
+                rouletteDisplay.innerText = '等待抽取...';
+            }
+        });
+    }
+
+    // 疯狂闪烁动画
+    function startRouletteAnimation() {
+        isAnimating = true;
+        let counter = 0;
+        const duration = 2000; 
+        const speed = 50;      
+        const maxFrames = duration / speed;
+
+        // 清除地图上之前的路线
+        walking.clear();
+
+        animationTimer = setInterval(() => {
+            const randomIndex = Math.floor(Math.random() * restaurants.length);
+            rouletteDisplay.innerText = restaurants[randomIndex].name;
+            counter++;
+
+            if (counter >= maxFrames) {
+                clearInterval(animationTimer);
+                const finalIndex = Math.floor(Math.random() * restaurants.length);
+                const chosenRestaurant = restaurants[finalIndex];
+                
+                rouletteDisplay.innerText = chosenRestaurant.name;
+                rouletteDisplay.classList.add('highlight'); 
+                
+                planWalkingRoute(chosenRestaurant);
+                isAnimating = false;
+                startBtn.disabled = false;
+            }
+        }, speed);
+    }
+
+    // 调用步行路线规划
+    function planWalkingRoute(endRestaurant) {
+        // 先让包含地图的容器显示出来
+        resultSection.style.display = 'block';
+        // 非常重要：容器从隐藏变显示时，需调用 resize 让地图重新计算尺寸，否则可能出现白屏或变形
+        map.resize(); 
+
+        // 【体验优化】在结果返回前，先显示加载提示
+        routeInfo.innerHTML = `去吃 <strong>${endRestaurant.name}</strong><br>
+                               <span class="loading-text">正在火速为您规划路线中... 🏃‍♂️💨</span>`;
+
+        walking.search(startLocation, endRestaurant.location, (status, result) => {
+            if (status === 'complete') {
+                const route = result.routes[0];
+                const distance = route.distance; 
+                const time = Math.ceil(route.time / 60); 
+                
+                routeInfo.innerHTML = `去吃 <strong>${endRestaurant.name}</strong><br>
+                                       直线距离不到2公里，走过去需要 <strong>${time}分钟</strong> 
+                                       （全程 <strong>${distance}米</strong>）`;
+            } else {
+                routeInfo.innerHTML = `去吃 <strong>${endRestaurant.name}</strong><br>
+                                       暂无法获取步行路线，可能有点远或有阻隔哦！`;
+            }
+        });
+    }
+
+    // 再抽一次逻辑
+    redrawBtn.addEventListener('click', () => {
+        if (isAnimating) return;
+        resultSection.style.display = 'none';
+        rouletteDisplay.classList.remove('highlight');
+        
+        if (restaurants.length > 0) {
+            startRouletteAnimation();
+        } else {
+            startBtn.click();
+        }
+    });
+</script>
+
+</body>
+</html>
